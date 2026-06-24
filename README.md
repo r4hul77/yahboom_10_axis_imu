@@ -39,6 +39,8 @@ startup.
 | `use_euler_orientation_fallback` | `true` | If no quaternion frame is emitted, use angle frame `0x53` roll/pitch/yaw as orientation. |
 | `output_rate_hz` | `100.0` | Requested device output rate. |
 | `save_configuration` | `false` | If true, sends `SAVE` after startup configuration. Defaults false to avoid unnecessary flash writes. |
+| `linear_acceleration_rms_mps2` | `0.00981` | Linear acceleration RMS noise in `m/s^2`; squared onto the `Imu.linear_acceleration_covariance` diagonal. |
+| `angular_velocity_rms_radps` | `0.00122111111` | Angular velocity RMS noise in `rad/s`; squared onto the `Imu.angular_velocity_covariance` diagonal. |
 
 Supported `output_rate_hz` values are:
 
@@ -86,6 +88,8 @@ ros2 launch yahboom_10_axis_imu yahboom_10_axis_imu.launch.py \
   port:=/dev/imu_usb \
   baud_rate:=115200 \
   output_rate_hz:=100.0 \
+  linear_acceleration_rms_mps2:=0.00981 \
+  angular_velocity_rms_radps:=0.00122111111 \
   save_configuration:=false
 ```
 
@@ -134,4 +138,3 @@ Current tests cover:
 - parser frame conversion and checksum handling;
 - IMU readiness mask behavior;
 - write-frame construction and output-rate mapping.
-
