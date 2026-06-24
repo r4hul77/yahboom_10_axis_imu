@@ -12,6 +12,8 @@ def generate_launch_description():
     use_euler_orientation_fallback = LaunchConfiguration('use_euler_orientation_fallback')
     output_rate_hz = LaunchConfiguration('output_rate_hz')
     save_configuration = LaunchConfiguration('save_configuration')
+    linear_acceleration_rms_mps2 = LaunchConfiguration('linear_acceleration_rms_mps2')
+    angular_velocity_rms_radps = LaunchConfiguration('angular_velocity_rms_radps')
 
     return LaunchDescription([
         DeclareLaunchArgument('port', default_value='/dev/imu_usb'),
@@ -20,6 +22,8 @@ def generate_launch_description():
         DeclareLaunchArgument('use_euler_orientation_fallback', default_value='true'),
         DeclareLaunchArgument('output_rate_hz', default_value='100.0'),
         DeclareLaunchArgument('save_configuration', default_value='false'),
+        DeclareLaunchArgument('linear_acceleration_rms_mps2', default_value='0.00981'),
+        DeclareLaunchArgument('angular_velocity_rms_radps', default_value='0.00122111111'),
         Node(
             package='yahboom_10_axis_imu',
             executable='yahboom_10_axis_imu_node',
@@ -35,6 +39,14 @@ def generate_launch_description():
                 ),
                 'output_rate_hz': ParameterValue(output_rate_hz, value_type=float),
                 'save_configuration': ParameterValue(save_configuration, value_type=bool),
+                'linear_acceleration_rms_mps2': ParameterValue(
+                    linear_acceleration_rms_mps2,
+                    value_type=float,
+                ),
+                'angular_velocity_rms_radps': ParameterValue(
+                    angular_velocity_rms_radps,
+                    value_type=float,
+                ),
             }],
         ),
     ])

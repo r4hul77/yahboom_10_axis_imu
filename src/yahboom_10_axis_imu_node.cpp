@@ -31,6 +31,14 @@ void markUnknown(std::array<double, 9> & covariance)
   covariance.fill(0.0);
 }
 
+void setDiagonalCovariance(std::array<double, 9> & covariance, double variance)
+{
+  covariance.fill(0.0);
+  covariance[0] = variance;
+  covariance[4] = variance;
+  covariance[8] = variance;
+}
+
 bool normalize(Quaternion & quaternion)
 {
   const double norm = std::sqrt(
@@ -118,6 +126,10 @@ public:
       declare_parameter<bool>("use_euler_orientation_fallback", true);
     output_rate_hz_ = declare_parameter<double>("output_rate_hz", kDefaultOutputRateHz);
     save_configuration_ = declare_parameter<bool>("save_configuration", false);
+    linear_acceleration_rms_mps2_ =
+      declare_parameter<double>("linear_acceleration_rms_mps2", 9.81e-3);
+    angular_velocity_rms_radps_ =
+      declare_parameter<double>("angular_velocity_rms_radps", 0.00122111111);
 
     imu_pub_ = create_publisher<sensor_msgs::msg::Imu>("imu/data", rclcpp::SensorDataQoS());
     mag_pub_ =
@@ -339,8 +351,12 @@ private:
     message.orientation.z = packet.orientation.z;
 
     markUnknown(message.orientation_covariance);
-    markUnknown(message.angular_velocity_covariance);
-    markUnknown(message.linear_acceleration_covariance);
+    setDiagonalCovariance(
+      message.angular_velocity_covariance,
+      angular_velocity_rms_radps_ * angular_velocity_rms_radps_);
+    setDiagonalCovariance(
+      message.linear_acceleration_covariance,
+      linear_acceleration_rms_mps2_ * linear_acceleration_rms_mps2_);
 
     imu_pub_->publish(message);
     RCLCPP_INFO_THROTTLE(
@@ -472,6 +488,8 @@ private:
   bool use_euler_orientation_fallback_{true};
   double output_rate_hz_{kDefaultOutputRateHz};
   bool save_configuration_{false};
+  double linear_acceleration_rms_mps2_{9.81e-3};
+  double angular_velocity_rms_radps_{0.00122111111};
 
   TermiosSerialPort serial_;
   ProtocolParser parser_;
