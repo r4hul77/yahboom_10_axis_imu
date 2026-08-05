@@ -1,9 +1,11 @@
 #include <array>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdint>
+#include <cstring>
 #include <exception>
 #include <memory>
 #include <mutex>
@@ -25,6 +27,9 @@ namespace yahboom_10_axis_imu
 {
 namespace
 {
+
+constexpr std::chrono::milliseconds kReconnectDelay{500};
+constexpr std::chrono::seconds kDataWatchdogTimeout{2};
 
 void markUnknown(std::array<double, 9> & covariance)
 {
@@ -163,46 +168,100 @@ private:
     }
   }
 
+  // Attempts to open (or re-open) the serial port, retrying with a fixed
+  // delay until it succeeds or shutdown is requested. This is what lets the
+  // node recover after the IMU is unplugged and later replugged: /dev/imu is
+  // an udev symlink keyed on the device's USB vendor/product ID, so each
+  // retry re-resolves it to whatever tty node currently backs the physical
+  // device, rather than requiring a fixed path bound once at startup.
+  bool openPortWithRetry()
+  {
+    while (rclcpp::ok() && running_.load()) {
+      try {
+        serial_.open(port_, baud_rate_);
+        RCLCPP_INFO(get_logger(), "Opened Yahboom 10-axis IMU on %s at %d baud",
+          port_.c_str(), baud_rate_);
+        configureDevice();
+        return true;
+      } catch (const std::exception & error) {
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 5000,
+          "Unable to open Yahboom 10-axis IMU serial port %s: %s; retrying",
+          port_.c_str(), error.what());
+        std::this_thread::sleep_for(kReconnectDelay);
+      }
+    }
+    return false;
+  }
+
   void readLoop()
   {
-    try {
-      serial_.open(port_, baud_rate_);
-      RCLCPP_INFO(get_logger(), "Opened Yahboom 10-axis IMU on %s at %d baud",
-        port_.c_str(), baud_rate_);
-      configureDevice();
-    } catch (const std::exception & error) {
-      RCLCPP_ERROR(get_logger(), "Unable to initialize Yahboom 10-axis IMU serial port: %s",
-        error.what());
-      running_.store(false);
-      return;
-    }
-
     std::array<uint8_t, 256> read_buffer{};
+
     while (rclcpp::ok() && running_.load()) {
-      ssize_t bytes_read = 0;
-      try {
-        bytes_read = serial_.read(read_buffer.data(), read_buffer.size());
-      } catch (const std::exception & error) {
-        if (running_.load()) {
-          RCLCPP_ERROR(get_logger(), "Serial read failed: %s", error.what());
-        }
+      if (!openPortWithRetry()) {
         break;
       }
 
-      if (bytes_read < 0) {
-        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "Serial read returned an error");
-        continue;
-      }
+      auto last_data_time = std::chrono::steady_clock::now();
 
-      for (ssize_t i = 0; i < bytes_read; ++i) {
-        auto frame = parser_.feed(read_buffer[static_cast<std::size_t>(i)]);
-        if (frame) {
-          RCLCPP_INFO(
-            get_logger(), "Acquired IMU frame: type=0x%02X (%s)",
-            frame->type, frameTypeName(frame->type));
-          handleFrame(*frame);
+      while (rclcpp::ok() && running_.load()) {
+        ssize_t bytes_read = 0;
+        try {
+          bytes_read = serial_.read(read_buffer.data(), read_buffer.size());
+        } catch (const std::exception & error) {
+          if (running_.load()) {
+            RCLCPP_ERROR(get_logger(), "Serial read failed: %s", error.what());
+          }
+          break;
+        }
+
+        if (bytes_read < 0) {
+          const int read_errno = errno;
+          if (read_errno == EINTR) {
+            continue;
+          }
+          if (running_.load()) {
+            RCLCPP_ERROR(
+              get_logger(), "Lost connection to IMU on %s (%s); attempting to reconnect",
+              port_.c_str(), std::strerror(read_errno));
+          }
+          break;
+        }
+
+        if (bytes_read == 0) {
+          // Some USB-serial drivers report a physical disconnect as a silent
+          // EOF (read() keeps returning 0) rather than an error, which would
+          // otherwise leave this loop spinning forever without recovering.
+          // The IMU streams continuously while connected, so a prolonged gap
+          // with no bytes at all means the device is gone.
+          const auto silence = std::chrono::steady_clock::now() - last_data_time;
+          if (silence > kDataWatchdogTimeout) {
+            if (running_.load()) {
+              RCLCPP_ERROR(
+                get_logger(),
+                "No data from IMU on %s for over %lds; assuming disconnected, reconnecting",
+                port_.c_str(), static_cast<long>(kDataWatchdogTimeout.count()));
+            }
+            break;
+          }
+          continue;
+        }
+
+        last_data_time = std::chrono::steady_clock::now();
+
+        for (ssize_t i = 0; i < bytes_read; ++i) {
+          auto frame = parser_.feed(read_buffer[static_cast<std::size_t>(i)]);
+          if (frame) {
+            RCLCPP_INFO(
+              get_logger(), "Acquired IMU frame: type=0x%02X (%s)",
+              frame->type, frameTypeName(frame->type));
+            handleFrame(*frame);
+          }
         }
       }
+
+      serial_.close();
     }
   }
 
