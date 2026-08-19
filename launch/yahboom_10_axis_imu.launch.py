@@ -16,7 +16,7 @@ def generate_launch_description():
     angular_velocity_rms_radps = LaunchConfiguration('angular_velocity_rms_radps')
 
     return LaunchDescription([
-        DeclareLaunchArgument('port', default_value='/dev/imu_usb'),
+        DeclareLaunchArgument('port', default_value='/dev/imu'),
         DeclareLaunchArgument('baud_rate', default_value='115200'),
         DeclareLaunchArgument('frame_id', default_value='imu_link'),
         DeclareLaunchArgument('use_euler_orientation_fallback', default_value='true'),
@@ -28,7 +28,7 @@ def generate_launch_description():
             package='yahboom_10_axis_imu',
             executable='yahboom_10_axis_imu_node',
             name='yahboom_10_axis_imu_node',
-            output='screen',
+            output='log',
             parameters=[{
                 'port': port,
                 'baud_rate': ParameterValue(baud_rate, value_type=int),
