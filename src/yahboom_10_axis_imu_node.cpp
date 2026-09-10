@@ -253,7 +253,7 @@ private:
         for (ssize_t i = 0; i < bytes_read; ++i) {
           auto frame = parser_.feed(read_buffer[static_cast<std::size_t>(i)]);
           if (frame) {
-            RCLCPP_INFO(
+            RCLCPP_DEBUG(
               get_logger(), "Acquired IMU frame: type=0x%02X (%s)",
               frame->type, frameTypeName(frame->type));
             handleFrame(*frame);

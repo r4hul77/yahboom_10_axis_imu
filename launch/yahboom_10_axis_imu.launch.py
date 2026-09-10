@@ -29,6 +29,7 @@ def generate_launch_description():
             executable='yahboom_10_axis_imu_node',
             name='yahboom_10_axis_imu_node',
             output='log',
+            arguments=['--ros-args', '--log-level', 'warn'],
             parameters=[{
                 'port': port,
                 'baud_rate': ParameterValue(baud_rate, value_type=int),
